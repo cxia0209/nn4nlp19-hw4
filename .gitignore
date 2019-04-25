@@ -102,3 +102,16 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+*.DS_Store
+saved_models/
+test_results/
+embeddings/
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+
+/.vscode
+/__pycache__

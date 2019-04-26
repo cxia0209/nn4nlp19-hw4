@@ -14,7 +14,10 @@ MAX_ACTION_NUM = 150
 COPY = '<COPY>'
 DELETE = '<DEL>'
 
-class Transducer(nn.Module):
+class LangTagTransducer(nn.Module):
+    '''
+    Add language tag before and after the encoders
+    '''
     def __init__(self, vocab_char, vocab_feat, vocab_pos, 
                  c_emb_dim=100, a_emb_dim=100, f_emb_dim=20, 
                  encoder_hidden_dim=200, encoder_layer_num=1, 
@@ -39,7 +42,7 @@ class Transducer(nn.Module):
             ac_share_emb: whether the acts (inserts) and the chars share embeddings
             pos_sp: whether specially treat pos tags
         """
-        super(Transducer, self).__init__()
+        super(LangTagTransducer, self).__init__()
         
         self.vocab_char = vocab_char
         self.vocab_feat = vocab_feat
@@ -122,21 +125,6 @@ class Transducer(nn.Module):
 
         # Classifier
         self.classifier = nn.Linear(self.decoder_hidden_dim, len(self.vocab_act))
-
-    '''
-    def _lstm_init_hidden(self, num_layers, num_directions, batch_size, hidden_size):
-        h0 = torch.zeros(num_layers*num_directions, batch_size, hidden_size)
-        c0 = torch.zeros(num_layers*num_directions, batch_size, hidden_size)
-        return (h0, c0)
-
-    def _gru_init_hidden(self, num_layers, num_directions, batch_size, hidden_size):
-        raise NotImplementedError
-        pass
-
-    def _coupled_lstm_init_hidden(self, num_layers, num_directions, batch_size, hidden_size):
-        raise NotImplementedError
-        pass
-    '''
 
     def _loss(self, log_ps, valid_actions, optimal_acts):
         """ @TODO: this is designed for our special case. try to generalize it
@@ -357,7 +345,7 @@ class Transducer(nn.Module):
             action = self.expert_roll_in(log_ps, valid_actions, optimal_acts)
         return action
 
-    def forward(self, lemma, lemma_len, feat, pos, m_lemma, target=None, 
+    def forward(self, lang, lemma, lemma_len, feat, pos, m_lemma, target=None, 
                 target_len=None, model_roll_in_p=0.5, model_roll_out_p=0.5, 
                 beam_width=1):
         """Transduce lemmas and get loss and predictions
@@ -366,6 +354,7 @@ class Transducer(nn.Module):
         @NOTE: roll-out method is sampled at each instance (global) @TODO: add local
         
         Args:
+            lang: language indicators. (batch,)
             lemma: the padded input form of the words. (batch, seqlen)
             lemma_len: the lengths of the lemmas. (batch,)
             feat: input grammar features. (batch, len(vocab_feat)-1); will refer as (batch, nfeat) later

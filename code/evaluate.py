@@ -6,7 +6,7 @@ from evalm import distance
 import logging
 
 
-def test(transducer, test_iter, beam_width=4, output_file=None, cuda=False, verbose=False):
+def test(model, test_iter, beam_width=4, output_file=None, cuda=False, verbose=False, covered=False):
     '''
 
     :param transducer: model
@@ -20,10 +20,10 @@ def test(transducer, test_iter, beam_width=4, output_file=None, cuda=False, verb
     count = 0.0
     out_list = []
 
-    transducer.eval()
+    model.eval()
 
     if cuda:
-        transducer.cuda()
+        model.cuda()
     if verbose:
         logger = logging.getLogger()
 
@@ -31,22 +31,31 @@ def test(transducer, test_iter, beam_width=4, output_file=None, cuda=False, verb
 
     data_id = 0
     with torch.no_grad():
-        for lemmas, lemma_lens, _, word_lens, feats, poss, m_lemmas, m_words in test_iter:
+        for batch in test_iter:
             '''
             lemmas, lemma_lens, feats, poss: model input
             words: label 2d Tensor (batchsize * padded_len)
             word_lens: label length before padding
             '''
+            if covered:
+                langs, lemmas, lemma_lens, feats, poss, m_lemmas = batch
+            else:
+                langs, lemmas, lemma_lens, _, word_lens, feats, poss, m_lemmas, m_words = batch
+
             if cuda:
-                lemmas, lemma_lens, feats, poss = lemmas.cuda(), lemma_lens.cuda(), feats.cuda(), poss.cuda()
-            _, prediction, _ = transducer(lemmas, lemma_lens, feats, poss, m_lemmas, beam_width=beam_width)
+                langs, lemmas, lemma_lens, feats, poss = langs.cuda(), lemmas.cuda(), lemma_lens.cuda(), feats.cuda(), poss.cuda()
+
+            _, prediction, _ = model(langs, lemmas, lemma_lens, feats, poss, m_lemmas, beam_width=beam_width)
             # prediction:  2d list (batch * various length)
-            _words = m_words.tolist()
-            label = [_words[i][:word_lens[i]] for i in range(len(_words))]
-            count += len(label)
-            for i in range(len(label)):
-                ed += distance(label[i], prediction[i])
-                acc += (label[i] == prediction[i])
+            count += len(prediction)
+            if not covered:
+                _words = m_words.tolist()
+                label = [_words[i][:word_lens[i]] for i in range(len(_words))]
+            
+            for i in range(len(prediction)):
+                if not covered:
+                    ed += distance(label[i], prediction[i])
+                    acc += (label[i] == prediction[i])
                 if output_file is not None or verbose:
                     #lemma_str = ''.join(char_vocab.i2w(j.item()) for j in lemmas[i])
                     lemma_str = ''.join(test_dataset.raw_data[data_id][0])

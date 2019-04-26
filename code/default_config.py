@@ -1,9 +1,12 @@
 # -*- coding: UTF-8 -*-
+import os
+
 def get_default_config():
+    codedir = os.path.split(os.path.realpath(__file__))[0]
     args = lambda: None
 
     # Data path
-    args.datadir = '../data'
+    args.datadir = os.path.join(codedir, '../data')
     # Incorporate validation data into vocabulary
     args.incorp_val = False
     # Random seed
@@ -14,6 +17,8 @@ def get_default_config():
     args.shuffle = True
     # Store model of the best epoch
     args.best = True
+    # Model
+    args.model = 'LangTagTransducer'
     # Fix the embeddings 
     args.static = False
     # Specially treat pos tags

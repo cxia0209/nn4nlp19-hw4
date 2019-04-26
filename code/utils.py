@@ -1,17 +1,19 @@
 # -*- coding: utf-8 -*-
 import os
 import time
+import yaml
 import logging
 
 import torch
 
 
 def make_out_paths(args):
+    codedir = os.path.split(os.path.realpath(__file__))[0]
     timestamp = time.strftime('%Y_%m_%d_%H_%M_%S')
-    data_ciph = args.datadir.replace('.', '_').replace('/', '-')
+    data_ciph = args.dataset.replace('.', '_').replace('/', '-')
     if not args.test:
         if not hasattr(args, 'modeldir') or args.modeldir is None:
-            args.modeldir = os.path.join('../saved_models/', args.lang + '-' + args.split + '-' + timestamp)
+            args.modeldir = os.path.join(codedir, '../saved_models/', data_ciph + '-' + timestamp)
         if not os.path.exists(args.modeldir):
             os.makedirs(args.modeldir)
         args.logdir = os.path.join(args.modeldir, 'logs/')
@@ -19,7 +21,7 @@ def make_out_paths(args):
             os.makedirs(args.logdir)
         args.predout = args.modeldir
     else:
-        args.testdir = os.path.join('../test_results/', args.lang + '-' + args.split + '-' + timestamp)
+        args.testdir = os.path.join(codedir, '../test_results/', data_ciph + '-' + timestamp)
         if not os.path.exists(args.testdir):
             os.makedirs(args.testdir)
         args.logdir = os.path.join(args.testdir, 'logs/')
@@ -48,9 +50,19 @@ def get_logger(args):
     return logger
 
 
-def load_model_conf(model_dir, conf):
-    with open(os.path.join(model_dir, 'conf.txt')) as f:
-        exec(f.read())
+def save_model_conf(model_dir, args, keys):
+    with open(os.path.join(model_dir, 'conf.yaml'), 'w') as f:
+        yaml_obj = {}
+        for key in keys:
+            yaml_obj[key] = getattr(args, key)
+        yaml.dump(yaml_obj, f)
+
+
+def load_model_conf(model_dir, args):
+    with open(os.path.join(model_dir, 'conf.yaml')) as f:
+        conf = yaml.load(f.read(), Loader=yaml.SafeLoader)
+        for key in conf:
+            setattr(args, key, conf[key])
 
 
 def load_model(model_dir, model):

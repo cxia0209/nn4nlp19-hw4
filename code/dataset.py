@@ -39,10 +39,15 @@ def pos_ids2string(ids, pos_vocab):
 
 class MorphDataset(D.Dataset):
 
-    def __init__(self, filename, char_vocab=None, feat_vocab=None, 
-                 pos_vocab=None, pos_sp=True, train=True):
+    def __init__(self, filenames, char_vocab=None, feat_vocab=None, 
+                 pos_vocab=None, pos_sp=True, train=True, covered=False):
         super().__init__()
-        self.filename = filename
+        if isinstance(filenames, list):
+            self.filenames = filenames
+        elif isinstance(filenames, str):
+            self.filenames = [filenames]
+        else:
+            raise ValueError
         self.train = train
         if char_vocab is None or feat_vocab is None or pos_vocab is None:
             assert char_vocab is None and feat_vocab is None and pos_vocab is None  # should be None at the same time
@@ -60,14 +65,19 @@ class MorphDataset(D.Dataset):
         self.raw_data = []
         self.data = []
         self.organized_data = []
+        self.data_sizes = []
         self.pos_sp = pos_sp
+        self.covered = covered
         self.build_dataset()
-       
+
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
         return self.organized_data[idx]
+
+    def get_data_sizes(self):
+        return self.data_sizes
 
     def get_vocabs(self):
         return self.char_vocab, self.feat_vocab, self.pos_vocab
@@ -76,20 +86,34 @@ class MorphDataset(D.Dataset):
         return self.m_char_vocab
 
     def build_dataset(self):
-        for (lemma, word, feat, pos) in self.read_file():
-            self.raw_data.append((lemma, word, feat, pos))
+        for sample in self.read_file():
+            self.raw_data.append(sample)
+            if self.covered:
+                lang, lemma, feat, pos = sample
+            else:
+                lang, lemma, word, feat, pos = sample
 
             lemma_ids = self.char_vocab.encode(lemma, growth=self.train)
-            word_ids = self.char_vocab.encode(word, growth=self.train)
+            if not self.covered:
+                word_ids = self.char_vocab.encode(word, growth=self.train)
             feat_ids = self.feat_vocab.encode(feat, growth=self.train)
             pos_ids = self.pos_vocab.encode(pos, growth=self.train)
 
             m_lemma_ids = self.m_char_vocab.encode(lemma, growth=True)
-            m_word_ids = self.m_char_vocab.encode(word, growth=True)
+            if not self.covered:
+                m_word_ids = self.m_char_vocab.encode(word, growth=True)
 
-            self.data.append((lemma_ids, word_ids, feat_ids, pos_ids, m_lemma_ids, m_word_ids))
+            if self.covered:
+                self.data.append((lang, lemma_ids, feat_ids, pos_ids, m_lemma_ids))
+            else:
+                self.data.append((lang, lemma_ids, word_ids, feat_ids, pos_ids, m_lemma_ids, m_word_ids))
 
-        for (lemma_ids, word_ids, feat_ids, pos_ids, m_lemma_ids, m_word_ids) in self.data:
+        for sample in self.data:
+            if self.covered:
+                lang_id, lemma_ids, feat_ids, pos_ids, m_lemma_ids = sample
+            else:
+                lang_id, lemma_ids, word_ids, feat_ids, pos_ids, m_lemma_ids, m_word_ids = sample
+            # process feats and poss
             ifeat_vec = []
             for i in self.feat_vocab.dic_i2w:
                 if i != self.feat_vocab.unk:  # do not count unk feat
@@ -109,22 +133,44 @@ class MorphDataset(D.Dataset):
                         else:
                             ipos_vec.append(self.pos_vocab.unk)
 
-            self.organized_data.append((np.array(lemma_ids, dtype=np.int64),
-                                        np.array(len(lemma_ids), dtype=np.int64),
-                                        np.array(word_ids, dtype=np.int64),
-                                        np.array(len(word_ids), dtype=np.int64),
-                                        np.array(ifeat_vec, dtype=np.int64),
-                                        np.array(ipos_vec, dtype=np.int64),
-                                        np.array(m_lemma_ids, dtype=np.int64),
-                                        np.array(m_word_ids, dtype=np.int64)))
+            if self.covered:
+                self.organized_data.append((np.array(lang_id, dtype=np.int64),
+                                            np.array(lemma_ids, dtype=np.int64),
+                                            np.array(len(lemma_ids), dtype=np.int64),
+                                            np.array(ifeat_vec, dtype=np.int64),
+                                            np.array(ipos_vec, dtype=np.int64),
+                                            np.array(m_lemma_ids, dtype=np.int64)))
+            else:
+                self.organized_data.append((np.array(lang_id, dtype=np.int64),
+                                            np.array(lemma_ids, dtype=np.int64),
+                                            np.array(len(lemma_ids), dtype=np.int64),
+                                            np.array(word_ids, dtype=np.int64),
+                                            np.array(len(word_ids), dtype=np.int64),
+                                            np.array(ifeat_vec, dtype=np.int64),
+                                            np.array(ipos_vec, dtype=np.int64),
+                                            np.array(m_lemma_ids, dtype=np.int64),
+                                            np.array(m_word_ids, dtype=np.int64)))
 
     def read_file(self):
-        with open(self.filename, 'r', encoding='utf-8') as fp:
-            for line in fp.readlines():
-                lemma, word, tags = line.strip().split('\t')
-                tags = tags.split(';')
-                #assert len(tags) > 1
-                yield list(lemma), list(word), tags[1:], tags[:1]
+        for lang, filename in enumerate(self.filenames):
+            lang = lang if self.train else 1
+            with open(filename, 'r', encoding='utf-8') as fp:
+                num = 0
+                for line in fp.readlines():
+                    if len(line.strip()) == 0:
+                        continue
+                    num += 1
+                    if self.covered:
+                        lemma, tags = line.strip().split('\t')
+                    else:
+                        lemma, word, tags = line.strip().split('\t')
+                    tags = tags.split(';')
+                    assert len(tags) > 1
+                    if self.covered:
+                        yield lang, list(lemma), tags[1:], tags[:1]
+                    else:
+                        yield lang, list(lemma), list(word), tags[1:], tags[:1]
+                self.data_sizes.append(num)
 
 
 class MorphDataloader(D.DataLoader):
@@ -135,6 +181,7 @@ class MorphDataloader(D.DataLoader):
             **kwargs
         )
         self.pad = self.dataset.char_vocab.pad
+        self.covered = self.dataset.covered
         self.char_vocab_size = len(self.dataset.char_vocab)
         self.feat_vocab_size = len(self.dataset.feat_vocab)
         self.pos_vocab_size = len(self.dataset.pos_vocab)
@@ -152,21 +199,32 @@ class MorphDataloader(D.DataLoader):
         Tensor: one hot vectors for part of speech tagging
     """
     def collate_fn(self, batches):
-        lemmas, lemma_lens, words, word_lens, feats, poss, m_lemmas, m_words = tuple(zip(*batches))
+        if self.covered:
+            langs, lemmas, lemma_lens, feats, poss, m_lemmas = tuple(zip(*batches))
+        else:
+            langs, lemmas, lemma_lens, words, word_lens, feats, poss, m_lemmas, m_words = tuple(zip(*batches))
 
         #padding
         padded_lemmas = self.zero_pad_concat(lemmas, self.pad, self.left_padding)
-        padded_words = self.zero_pad_concat(words, self.pad, self.left_padding)
+        if not self.covered:
+            padded_words = self.zero_pad_concat(words, self.pad, self.left_padding)
         padded_m_lemmas = self.zero_pad_concat(m_lemmas, self.pad, self.left_padding)
-        padded_m_words = self.zero_pad_concat(m_words, self.pad, self.left_padding)
+        if not self.covered:
+            padded_m_words = self.zero_pad_concat(m_words, self.pad, self.left_padding)
         
         nhot_feats = np.array(feats, dtype=np.int64)
         nhot_poss = np.array(poss, dtype=np.int64)
 
-        np_lemma_lens = np.array(lemma_lens, dtype=np.int64)
-        np_word_lens = np.array(word_lens, dtype=np.int64)
+        np_langs = np.array(langs, dtype=np.int64)
 
-        return torch.from_numpy(padded_lemmas), torch.from_numpy(np_lemma_lens), torch.from_numpy(padded_words), torch.from_numpy(np_word_lens), torch.from_numpy(nhot_feats), torch.from_numpy(nhot_poss), torch.from_numpy(padded_m_lemmas), torch.from_numpy(padded_m_words)
+        np_lemma_lens = np.array(lemma_lens, dtype=np.int64)
+        if not self.covered:
+            np_word_lens = np.array(word_lens, dtype=np.int64)
+
+        if self.covered:
+            return torch.from_numpy(np_langs), torch.from_numpy(padded_lemmas), torch.from_numpy(np_lemma_lens), torch.from_numpy(nhot_feats), torch.from_numpy(nhot_poss), torch.from_numpy(padded_m_lemmas),
+        else:
+            return torch.from_numpy(np_langs), torch.from_numpy(padded_lemmas), torch.from_numpy(np_lemma_lens), torch.from_numpy(padded_words), torch.from_numpy(np_word_lens), torch.from_numpy(nhot_feats), torch.from_numpy(nhot_poss), torch.from_numpy(padded_m_lemmas), torch.from_numpy(padded_m_words)
 
     # general padding function without sort
     def zero_pad_concat(self, inputs, pad_value, left_padding=False):

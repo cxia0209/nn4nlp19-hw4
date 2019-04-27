@@ -47,6 +47,10 @@ def get_default_config():
     args.batch_size = 1
     # Beam size
     args.beam_width = 4
+    # Oversampling for low language
+    args.oversample = 1
+    # Start epoch number (which will affect roll-in)
+    args.start_epoch = 1
     # Epochs
     args.epochs = 60
     # Patience

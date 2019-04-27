@@ -15,7 +15,7 @@ import configs.empty_config as configuration
 import utils
 
 #from model.transducer import Transducer
-from dataset import MorphDataset, MorphDataloader
+from dataset import MorphDataset, MorphDataloader, OverRandomSampler
 from vocab import Vocabulary
 from trainer import Trainer
 from evaluate import test
@@ -71,6 +71,7 @@ if __name__ == '__main__':
     # training
     group_train = parser.add_argument_group('training')
     group_train.add_argument('--lr', type=float, metavar='FLOAT', help='initial learning rate [default: %f]' % args.lr)
+    group_train.add_argument('--start-epoch', type=int, help='start epoch number (which will affect roll-in) [default: %d]' %args.start_epoch)
     group_train.add_argument('--epochs', '-e', type=int, help='number of epochs for training [default: %d]' %args.epochs)
     group_train.add_argument('--patience', type=int, help='patience [default: %d]' %args.patience)
     group_train.add_argument('--batch_size', type=int, help='batch size for training [default: %d]' % args.batch_size)
@@ -81,6 +82,7 @@ if __name__ == '__main__':
     group_train.add_argument('--l2', type=float, help='l2 regularization scale [default: %f]' %args.l2)
     group_train.add_argument('--optim', type=str, help='adadelta | adam [default: %s]' %args.optim)
     group_train.add_argument('--beam_width', type=int, help='beam size in testing [default: %s]' %str(args.beam_width))
+    group_train.add_argument('--oversample', type=int, help='oversampling for low language [default: %d]' % args.oversample)
     new_args = parser.parse_args()
 
     # Update config
@@ -195,8 +197,12 @@ if __name__ == '__main__':
         feat_vocab.save(os.path.join(args.modeldir, 'feat_vocab'))
         pos_vocab.save(os.path.join(args.modeldir, 'pos_vocab'))
 
+        # build sampler
+        oversampling = [args.oversample if data[0] == 1 else 1 for data in train_dataset]
+
         train_iter = MorphDataloader(train_dataset, left_padding=False, 
-                                     batch_size=args.batch_size, shuffle=True, pin_memory=True)
+                                     sampler=OverRandomSampler(train_dataset, oversampling=oversampling),
+                                     batch_size=args.batch_size, pin_memory=True)
         dev_iter = MorphDataloader(dev_dataset, left_padding=False, 
                                    batch_size=args.batch_size, shuffle=False)
         test_iter = MorphDataloader(test_dataset, left_padding=False, 
@@ -229,26 +235,33 @@ if __name__ == '__main__':
                                     batch_size=args.batch_size, shuffle=False)
 
     ###############################################
-    ##            Constrcuting Models            ##
+    ##            Constrcuting Model             ##
     ###############################################
+    logger.info('Constrcuting Model ... ')
     model = MorphModel(char_vocab, feat_vocab, pos_vocab, 
                        args.c_emb_dim, args.a_emb_dim, args.f_emb_dim, 
                        args.encoder_hidden_dim, args.encoder_layer_num,
                        args.decoder_hidden_dim, args.decoder_layer_num,
                        args.rnn_type, args.ac_share_emb, args.pos_sp)
     if hasattr(args, 'load') and args.load is not None:
+        logger.info('  load model from %s ... ' % args.load)
         utils.load_model(args.load, model)
+    logger.info('  model summary: \n' + str(model))
+    logger.info('  num. model params: {} (num. trained: {})'.format(
+        sum(p.numel() for p in model.parameters()),
+        sum(p.numel() for p in model.parameters() if p.requires_grad),
+    ))
 
     ###############################################
     ##                 Training                  ##
     ###############################################
-    if not args.test:  # train
+    if not args.test:  # train 
         trainer = Trainer(optim=args.optim, optim_args={'lr': args.lr})
         trainer.train(model, train_iter, dev_iter, args.epochs, 
                       args.patience, args.roll_in_k, args.roll_out_p, 
                       args.beam_width, args.clip, args.l2, cuda=args.cuda, 
                       best=args.best, model_dir=args.modeldir, 
-                      verbose=args.verbose)
+                      verbose=args.verbose, start_epoch=args.start_epoch)
 
     ###############################################
     ##                 Predict                   ##
@@ -263,13 +276,13 @@ if __name__ == '__main__':
 
     dev_scores = test(model, dev_iter, beam_width=args.beam_width, 
                       output_file=dev_output_file, cuda=args.cuda, 
-                      verbose=args.verbose)
+                      verbose=args.verbose, covered=False)
 
     logger.info("dev acc: %f, ed: %f" % (dev_scores['acc'], dev_scores['ed']))
     
     test_scores = test(model, test_iter, beam_width=args.beam_width, 
                        output_file=test_output_file, cuda=args.cuda, 
-                       verbose=args.verbose)
+                       verbose=args.verbose, covered=args.covered_test)
     if args.covered_test:
         logger.info("test acc: %f, ed: %f" % (test_scores['acc'], test_scores['ed']))
     else:

@@ -58,14 +58,17 @@ def test(model, test_iter, beam_width=4, output_file=None, cuda=False, verbose=F
                     acc += (label[i] == prediction[i])
                 if output_file is not None or verbose:
                     #lemma_str = ''.join(char_vocab.i2w(j.item()) for j in lemmas[i])
-                    lemma_str = ''.join(test_dataset.raw_data[data_id][0])
+                    lemma_str = ''.join(test_dataset.raw_data[data_id][1])
                     #pred_str = ''.join(char_vocab.i2w(j) for j in prediction[i])
                     pred_str = ''.join(word_ids2string(prediction[i], test_iter.dataset.get_m_voacb()))
                     # poss[i] can be a one hot vector or an integer
                     #pos = pos_vocab.i2w(sum(poss[i]).item())
                     #feat = [feat_vocab.i2w(j.item()) for j in feats[i] if j.item() != feat_vocab.unk]
                     #ft_str = ';'.join([pos] + feat)
-                    ft_str = ';'.join(test_dataset.raw_data[data_id][3] + test_dataset.raw_data[data_id][2])
+                    if covered:
+                        ft_str = ';'.join(test_dataset.raw_data[data_id][3] + test_dataset.raw_data[data_id][2])
+                    else:
+                        ft_str = ';'.join(test_dataset.raw_data[data_id][4] + test_dataset.raw_data[data_id][3])
                     out_list.append('\t'.join([lemma_str, pred_str, ft_str]))
                 if verbose:
                     logger.info(str(label[i]))

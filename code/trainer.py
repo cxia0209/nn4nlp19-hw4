@@ -49,7 +49,7 @@ class Trainer(object):
     def train(self, model, train_iter, dev_iter, num_epochs=60, 
               patience=20, roll_in_k=12, roll_out_p=0.5, beam_width=4, 
               clip=10.0, l2=0.0, cuda=False, best=True, model_dir='../model/', 
-              verbose=False):
+              verbose=False, start_epoch=1):
         """
         @TODO: time
         """
@@ -70,12 +70,13 @@ class Trainer(object):
         best_dev_ed = float("inf")
         best_epoch = 0
 
-        epoch = 1
+        epoch = start_epoch
         while epoch <= num_epochs:
             model.train()
 
             epoch_loss = 0.0
-
+            epoch_word_len = 0.0
+            epoch_pred_len = 0.0
             model_roll_in_p = 1 - (roll_in_k / (roll_in_k + np.exp(float(epoch)/roll_in_k)))
             
             self.logger.info('Epoch: %d/%d start ... model_roll_in_p: %f' % (epoch, num_epochs, model_roll_in_p))
@@ -134,9 +135,12 @@ class Trainer(object):
 
                     #if verbose:
                     #    self.logger.info('Epoch: %d/%d, Iteration: %d, loss: %f' % (epoch, num_epochs, ss, loss.item()))
-                    t.set_postfix(epoch="%d/%d" %(epoch, num_epochs), loss=epoch_loss/(ss+1))
-                    t.update()
-                    
+
+                    epoch_word_len += word_len.sum().item()
+                    epoch_pred_len += sum([len(p) for p in prediction])
+
+                    t.set_postfix(epoch="%d/%d" %(epoch, num_epochs), loss=epoch_loss/(ss+1), word_len=epoch_word_len/(ss+1), pred_len=epoch_pred_len/(ss+1))
+                    t.update()   
 
             self.logger.info('  ave train loss: %f' % (epoch_loss/len(train_iter)))
 

@@ -56,7 +56,7 @@ if __name__ == '__main__':
     #parser.add_argument('--emb', type=str, help='use existing word embeddings [default: %s]' %str(args.emb))
     # model
     group_model = parser.add_argument_group('model')
-    group_model.add_argument('--model', type=int, help='Model to use [default: %s]' %args.model)
+    group_model.add_argument('--model', type=str, help='Model to use [default: %s]' %args.model)
     group_model.add_argument('--c_emb_dim', type=int, help='char embedding dim size [default: %d]' %args.c_emb_dim)
     group_model.add_argument('--a_emb_dim', type=int, help='action embedding dim size [default: %d]' %args.a_emb_dim)
     group_model.add_argument('--f_emb_dim', type=int, help='feature embedding dim size [default: %d]' %args.f_emb_dim)

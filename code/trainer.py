@@ -101,7 +101,10 @@ class Trainer(object):
                         m_lemma = m_lemma.cuda()
 
                     # Run batch through transducer
-                    loss, prediction, predicted_acts = model(lang, lemma, lemma_len, feat, pos, m_lemma, word, word_len, model_roll_in_p=model_roll_in_p)
+                    ret = model(lang, lemma, lemma_len, feat, pos, m_lemma, word, word_len, model_roll_in_p=model_roll_in_p)
+                    loss = ret['loss']
+                    prediction = ret['prediction']
+                    predicted_acts = ret['predicted_acts']
 
                     # L2 Regularization
                     l2_reg = None
@@ -124,22 +127,16 @@ class Trainer(object):
                     #torch.nn.utils.clip_grad_norm_(transducer.parameters(), clip)
                     optim.step()
 
-                    '''
-                    @TODO: tf board
-                    info = {
-                        'Loss': loss.data[0],
-                    }
-                    for tag, value in info.items():
-                        self.tf_logger.scalar_summary(tag, value, ss)
-                    '''
-
-                    #if verbose:
-                    #    self.logger.info('Epoch: %d/%d, Iteration: %d, loss: %f' % (epoch, num_epochs, ss, loss.item()))
-
                     epoch_word_len += word_len.sum().item()
                     epoch_pred_len += sum([len(p) for p in prediction])
 
-                    t.set_postfix(epoch="%d/%d" %(epoch, num_epochs), loss=epoch_loss/(ss+1), word_len=epoch_word_len/(ss+1), pred_len=epoch_pred_len/(ss+1))
+                    tqdm_log = {
+                        'loss': epoch_loss/(ss+1),
+                        'word_len': epoch_word_len/(ss+1),
+                        'pred_len': epoch_pred_len/(ss+1)
+                    }
+
+                    t.set_postfix(epoch="%d/%d" %(epoch, num_epochs), **tqdm_log)
                     t.update()   
 
             self.logger.info('  ave train loss: %f' % (epoch_loss/len(train_iter)))
@@ -159,5 +156,5 @@ class Trainer(object):
                     save_model(model_dir, model)
             else:
                 save_model(model_dir, model)
-                
+                    
             epoch += 1

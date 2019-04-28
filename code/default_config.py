@@ -65,6 +65,8 @@ def get_default_config():
     args.l2 = 0.0
     # adadelta | adam
     args.optim = 'adadelta'
+    # Sampler for iter
+    args.sampler = 'OverRandomSampler'
 
 
     return args

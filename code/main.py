@@ -15,7 +15,9 @@ import configs.empty_config as configuration
 import utils
 
 #from model.transducer import Transducer
-from dataset import MorphDataset, MorphDataloader, OverRandomSampler
+from dataset import MorphDataset, MorphDataloader
+from samplers.over_random_sampler import OverRandomSampler
+from samplers.over_balanced_random_sampler import OverBalancedRandomSampler
 from vocab import Vocabulary
 from trainer import Trainer
 from evaluate import test
@@ -82,6 +84,7 @@ if __name__ == '__main__':
     group_train.add_argument('--l2', type=float, help='l2 regularization scale [default: %f]' %args.l2)
     group_train.add_argument('--optim', type=str, help='adadelta | adam [default: %s]' %args.optim)
     group_train.add_argument('--beam_width', type=int, help='beam size in testing [default: %s]' %str(args.beam_width))
+    group_train.add_argument('--sampler', type=str, help='sampler for iter [default: %s]' %str(args.sampler))
     group_train.add_argument('--oversample', type=int, help='oversampling for low language [default: %d]' % args.oversample)
     new_args = parser.parse_args()
 
@@ -198,10 +201,15 @@ if __name__ == '__main__':
         pos_vocab.save(os.path.join(args.modeldir, 'pos_vocab'))
 
         # build sampler
-        oversampling = [args.oversample if data[0] == 1 else 1 for data in train_dataset]
-
+        if args.sampler == 'OverRandomSampler':
+            oversampling = [args.oversample if data[0] == 1 else 1 for data in train_dataset]
+            sampler=OverRandomSampler(train_dataset, oversampling=oversampling)
+        elif args.sampler == 'OverBalancedRandomSampler':
+            oversampling = [True if data[0] == 1 else False for data in train_dataset]
+            sampler=OverBalancedRandomSampler(train_dataset, oversampling=oversampling, over_weight=args.oversample)
+        
         train_iter = MorphDataloader(train_dataset, left_padding=False, 
-                                     sampler=OverRandomSampler(train_dataset, oversampling=oversampling),
+                                     sampler=sampler,
                                      batch_size=args.batch_size, pin_memory=True)
         dev_iter = MorphDataloader(dev_dataset, left_padding=False, 
                                    batch_size=args.batch_size, shuffle=False)

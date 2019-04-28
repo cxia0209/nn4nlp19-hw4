@@ -470,4 +470,6 @@ class LangTagTransducer(nn.Module):
 
             batch_loss = batch_loss / loss_items
 
-        return batch_loss, words, action_histories
+        return {'loss': batch_loss,
+                'prediction': words,
+                'predicted_acts': action_histories}

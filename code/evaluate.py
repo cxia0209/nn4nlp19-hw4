@@ -45,7 +45,8 @@ def test(model, test_iter, beam_width=4, output_file=None, cuda=False, verbose=F
             if cuda:
                 langs, lemmas, lemma_lens, feats, poss = langs.cuda(), lemmas.cuda(), lemma_lens.cuda(), feats.cuda(), poss.cuda()
 
-            _, prediction, _ = model(langs, lemmas, lemma_lens, feats, poss, m_lemmas, beam_width=beam_width)
+            ret = model(langs, lemmas, lemma_lens, feats, poss, m_lemmas, beam_width=beam_width)
+            prediction = ret['prediction']
             # prediction:  2d list (batch * various length)
             count += len(prediction)
             if not covered:

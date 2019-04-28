@@ -215,7 +215,7 @@ class MorphDataset(D.Dataset):
                     else:
                         lemma, word, tags = line.strip().split('\t')
                     tags = tags.split(';')
-                    assert len(tags) > 1
+                    assert len(tags) > 0
                     if self.covered:
                         yield lang, list(lemma), tags[1:], tags[:1]
                     else:

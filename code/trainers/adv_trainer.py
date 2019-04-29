@@ -9,7 +9,7 @@ from utils import save_model
 from evaluate import test
 
 
-class Trainer(object):
+class AdvTrainer(object):
     default_adam_args = {"lr": 0.001,
                          "betas": (0.9, 0.999),
                          "eps": 1e-8,
@@ -49,12 +49,13 @@ class Trainer(object):
     def train(self, model, train_iter, dev_iter, num_epochs=60, 
               patience=20, roll_in_k=12, roll_out_p=0.5, beam_width=4, 
               clip=10.0, l2=0.0, cuda=False, best=True, model_dir='../model/', 
-              verbose=False, start_epoch=1):
+              verbose=False, start_epoch=1, lambda_q=0.01):
         """
         @TODO: time
         """
         # Zero gradients of both optimizers
-        optim = self.optim(model.parameters(), **self.optim_args)
+        optim = self.optim(model.transducer_parameters(), **self.optim_args)
+        optim_q = torch.optim.Adam(model.discriminator_parameters(), lr=0.001)
 
         self._reset_histories()
 
@@ -75,6 +76,8 @@ class Trainer(object):
             model.train()
 
             epoch_loss = 0.0
+            epoch_t_loss = 0.0
+            epoch_q_loss = 0.0
             epoch_word_len = 0.0
             epoch_pred_len = 0.0
             model_roll_in_p = 1 - (roll_in_k / (roll_in_k + np.exp(float(epoch)/roll_in_k)))
@@ -88,7 +91,9 @@ class Trainer(object):
 
                     # Reset
                     optim.zero_grad()
-                    loss = 0
+                    optim_q.zero_grad()
+                    loss = 0.0
+                    loss_q = 0.0
 
                     if cuda:
                         lang = lang.cuda()
@@ -100,9 +105,24 @@ class Trainer(object):
                         pos = pos.cuda()
                         m_lemma = m_lemma.cuda()
 
+                    # Run batch through discriminator
+                    model.freeze_transducer()
+                    model.clamp_dis()
+                    ret = model(lang, lemma, lemma_len, feat, pos, m_lemma, word, word_len, dis_only=True)
+                    loss_q = ret['dis_loss']
+                    epoch_q_loss += loss_q.item()
+                    loss_q.backward()
+                    optim_q.step()
+
+                    # Reset
+                    optim.zero_grad()
+                    loss = 0.0
+
                     # Run batch through transducer
+                    model.freeze_discriminator()
+                    model.clamp_dis()
                     ret = model(lang, lemma, lemma_len, feat, pos, m_lemma, word, word_len, model_roll_in_p=model_roll_in_p)
-                    loss = ret['loss']
+                    loss = ret['loss'] - lambda_q * ret['dis_loss']
                     prediction = ret['prediction']
                     predicted_acts = ret['predicted_acts']
 
@@ -120,6 +140,7 @@ class Trainer(object):
                     # update loss
                     loss = loss + l2_reg * l2
 
+                    epoch_t_loss += ret['loss'].item()
                     epoch_loss += loss.item()
 
                     # Backpropagation
@@ -132,6 +153,8 @@ class Trainer(object):
 
                     tqdm_log = {
                         'loss': epoch_loss/(ss+1),
+                        'loss_q': epoch_q_loss/(ss+1),
+                        'loss_t': epoch_t_loss/(ss+1),
                         'word_len': epoch_word_len/(ss+1),
                         'pred_len': epoch_pred_len/(ss+1)
                     }

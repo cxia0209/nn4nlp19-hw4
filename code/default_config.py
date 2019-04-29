@@ -67,6 +67,8 @@ def get_default_config():
     args.optim = 'adadelta'
     # Sampler for iter
     args.sampler = 'OverRandomSampler'
+    # lambda for adversarial training
+    args.lambda_q = 0.01
 
 
     return args

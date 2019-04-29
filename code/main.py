@@ -19,7 +19,6 @@ from dataset import MorphDataset, MorphDataloader
 from samplers.over_random_sampler import OverRandomSampler
 from samplers.over_balanced_random_sampler import OverBalancedRandomSampler
 from vocab import Vocabulary
-from trainer import Trainer
 from evaluate import test
 
 if __name__ == '__main__':
@@ -86,6 +85,7 @@ if __name__ == '__main__':
     group_train.add_argument('--beam_width', type=int, help='beam size in testing [default: %s]' %str(args.beam_width))
     group_train.add_argument('--sampler', type=str, help='sampler for iter [default: %s]' %str(args.sampler))
     group_train.add_argument('--oversample', type=int, help='oversampling for low language [default: %d]' % args.oversample)
+    group_train.add_argument('--lambda-q', type=float, help='lambda for adversarial training [default: %d]' % args.oversample)
     new_args = parser.parse_args()
 
     # Update config
@@ -153,9 +153,13 @@ if __name__ == '__main__':
         logger.info('  %s: %s' %(key, str(args.__dict__[key])))
 
     # Import model
+    logger.info('Model import: %s' %args.model)
     if args.model == 'LangTagTransducer':
-        logger.info('Model import: %s' %args.model)
         from model.lang_tag_transducer import LangTagTransducer as MorphModel
+        from trainers.lang_tag_trainer import LangTagTrainer as Trainer
+    elif args.model == 'AdvTransducer':
+        from model.adv_transducer import AdvTransducer as MorphModel
+        from trainers.adv_trainer import AdvTrainer as Trainer
     else:
         raise ValueError
 
@@ -260,6 +264,8 @@ if __name__ == '__main__':
         sum(p.numel() for p in model.parameters() if p.requires_grad),
     ))
 
+    model.transducer_parameters()
+
     ###############################################
     ##                 Training                  ##
     ###############################################
@@ -269,7 +275,8 @@ if __name__ == '__main__':
                       args.patience, args.roll_in_k, args.roll_out_p, 
                       args.beam_width, args.clip, args.l2, cuda=args.cuda, 
                       best=args.best, model_dir=args.modeldir, 
-                      verbose=args.verbose, start_epoch=args.start_epoch)
+                      verbose=args.verbose, start_epoch=args.start_epoch, 
+                      lambda_q=args.lambda_q)
 
     ###############################################
     ##                 Predict                   ##

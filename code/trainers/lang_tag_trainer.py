@@ -49,7 +49,7 @@ class LangTagTrainer(object):
     def train(self, model, train_iter, dev_iter, num_epochs=60, 
               patience=20, roll_in_k=12, roll_out_p=0.5, beam_width=4, 
               clip=10.0, l2=0.0, cuda=False, best=True, model_dir='../model/', 
-              verbose=False, start_epoch=1):
+              verbose=False, start_epoch=1,lambda_q=None):
         """
         @TODO: time
         """

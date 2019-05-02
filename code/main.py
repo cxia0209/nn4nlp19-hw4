@@ -160,6 +160,9 @@ if __name__ == '__main__':
     elif args.model == 'AdvTransducer':
         from model.adv_transducer import AdvTransducer as MorphModel
         from trainers.adv_trainer import AdvTrainer as Trainer
+    elif args.model == 'LangNoTagTransducer':
+        from model.lang_no_tag_transducer import LangNoTagTransducer as MorphModel
+        from trainers.lang_tag_trainer import LangTagTrainer as Trainer
     else:
         raise ValueError
 
@@ -264,7 +267,7 @@ if __name__ == '__main__':
         sum(p.numel() for p in model.parameters() if p.requires_grad),
     ))
 
-    model.transducer_parameters()
+    #model.transducer_parameters()
 
     ###############################################
     ##                 Training                  ##

@@ -14,7 +14,7 @@ MAX_ACTION_NUM = 150
 COPY = '<COPY>'
 DELETE = '<DEL>'
 
-class LangTagTransducer(nn.Module):
+class LangNoTagTransducer(nn.Module):
     '''
     Add language tag before and after the encoders
     '''
@@ -42,7 +42,7 @@ class LangTagTransducer(nn.Module):
             ac_share_emb: whether the acts (inserts) and the chars share embeddings
             pos_sp: whether specially treat pos tags
         """
-        super(LangTagTransducer, self).__init__()
+        super(LangNoTagTransducer, self).__init__()
         
         self.vocab_char = vocab_char
         self.vocab_feat = vocab_feat
@@ -78,8 +78,8 @@ class LangTagTransducer(nn.Module):
             self.embedding_act = nn.Embedding(len(self.vocab_act), self.a_emb_dim, padding_idx=self.vocab_act.pad)
         self.embedding_feat = nn.Embedding(len(self.vocab_feat), self.f_emb_dim)
         self.embedding_pos = nn.Embedding(len(self.vocab_pos), self.f_emb_dim)
-        self.embedding_lang_enc = nn.Embedding(2, self.c_emb_dim)  # 2 languages
-        self.embedding_lang_dec = nn.Embedding(2, self.f_emb_dim)  # 2 languages
+        #self.embedding_lang_enc = nn.Embedding(2, self.c_emb_dim)  # 2 languages
+        #self.embedding_lang_dec = nn.Embedding(2, self.f_emb_dim)  # 2 languages
 
         # Encoder
         if self.rnn_type == 'lstm':
@@ -110,7 +110,7 @@ class LangTagTransducer(nn.Module):
             # do not count UNKs
             self.feat_pos_concat_dim = self.f_emb_dim * (len(self.vocab_feat) + len(self.vocab_pos) - 2)
         # +1 for decoder language embedding
-        self.feat_pos_concat_dim += self.f_emb_dim
+        #self.feat_pos_concat_dim += self.f_emb_dim
         # times 2 for bi-directional
         self.deocer_inp_dim = self.a_emb_dim + (2 * self.encoder_hidden_dim) + self.feat_pos_concat_dim
 
@@ -139,6 +139,11 @@ class LangTagTransducer(nn.Module):
         opt_log_ps = torch.index_select(log_ps, -1, torch.tensor(opt_perm_acts, device=device))
         loss = -torch.logsumexp(opt_log_ps, dim=-1)
         return loss
+
+    def transducer_parameters(self):
+        for name, para in self.named_parameters():
+            if 'lang-dis' not in name:
+                yield para
 
     def _valid_acts(self, curr, seqlen):
         diff = seqlen - curr
@@ -292,11 +297,6 @@ class LangTagTransducer(nn.Module):
             ins_cost = 1 + self._edit_cost_dp(lemma[curr:], lemma_len-curr, target[correct_num+1:], target_len-correct_num-1)
             potential_act_costs.append((target_i, ins_cost))
         return potential_act_costs
-    
-    def transducer_parameters(self):
-        for name, para in self.named_parameters():
-            if 'lang-dis' not in name:
-                yield para
 
     def roll_out(self, lemma, encode_lemma, lemma_len, fi, hx, target, 
                  target_len, curr, correct_num, valid_actions, 
@@ -385,21 +385,22 @@ class LangTagTransducer(nn.Module):
         test = False if target is not None else True
 
         vlemma = self.embedding_char(lemma)  # (batch, seqlen, c_emb_dim)
-        vlang_enc = self.embedding_lang_enc(lang).unsqueeze(1)  # (batch, 1, c_emb_dim)
-        vinpseq = torch.cat((vlang_enc, vlemma, vlang_enc), dim=1)  # (batch, seqlen+2, c_emb_dim)
+        #vlang_enc = self.embedding_lang_enc(lang).unsqueeze(1)  # (batch, 1, c_emb_dim)
+        #vinpseq = torch.cat((vlang_enc, vlemma, vlang_enc), dim=1)  # (batch, seqlen+2, c_emb_dim)
+        vinpseq = vlemma
         #vlang = self.embedding_lang_enc()
 
         # Get feature and pos vec
         vpos = self.embedding_pos(pos)  # (batch, npos, f_emb_dim)
         vfeat = self.embedding_feat(feat)  # (batch, nfeat, f_emb_dim)
-        vlang_dec = self.embedding_lang_dec(lang).unsqueeze(1)  # (batch, nfeat, f_emb_dim)
-        f = torch.cat((vpos, vfeat, vlang_dec), dim=1).view(batch_size, self.feat_pos_concat_dim)  # (batch, feat_pos_concat_dim)
+        #vlang_dec = self.embedding_lang_dec(lang).unsqueeze(1)  # (batch, nfeat, f_emb_dim)
+        f = torch.cat((vpos, vfeat), dim=1).view(batch_size, self.feat_pos_concat_dim)  # (batch, feat_pos_concat_dim)
 
         # Encode
         # h0 = self.init_hidden(self.encoder_layer_num, 2, batch_size, self.encoder_hidden_dim)
         # h0 will be init to zero by default
         encode_inpseq, _ = self.encoder(vinpseq)  # (batch, seqlen+2, num_directions * hidden_size)
-        encode_lemmas = encode_inpseq[:,1:-1,:]
+        encode_lemmas = encode_inpseq
 
         batch_loss = torch.tensor(0.0, device=device)
         words = []
